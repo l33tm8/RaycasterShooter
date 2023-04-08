@@ -33,9 +33,10 @@ namespace GLShooter
             var cameraX = 2 * x / (double)width - 1;
             var rayDir = Direction + Plane * cameraX;
             var deltaDist = new Vector(Math.Abs(1 / rayDir.X), Math.Abs(1 / rayDir.Y));
+
             double perpWallDist;
-            var mapX = Position.X;
-            var mapY = Position.Y;
+            var mapX = (int)Position.X;
+            var mapY = (int)Position.Y;
             var stepX = rayDir.X < 0 ? -1 : 1;
             var stepY = rayDir.Y < 0 ? -1 : 1;
             var isHitted = false;

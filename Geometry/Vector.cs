@@ -8,6 +8,7 @@ namespace GLShooter.Geometry
         public double Y { get; set; }
 
         public static Vector operator +(Vector a, Vector b) => new(a.X + b.X, a.Y + b.Y);
+        public static Vector operator -(Vector a, Vector b) => new(a.X - b.X, a.Y - b.Y);
         public static Vector operator *(Vector a, int b) => new(a.X * b, a.Y * b);
         public static Vector operator *(Vector a, double b) => new(a.X * b, a.Y * b);
         public double Length() => Math.Sqrt(X * X + Y * Y);

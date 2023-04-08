@@ -32,7 +32,13 @@ namespace GLShooter
         private void Form1_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.W)
-                camera.Position += camera.Direction * 0.05;
+                camera.Position += camera.Direction * 0.1;
+            if (e.KeyCode == Keys.S)
+                camera.Position -= camera.Direction * 0.1;
+            if (e.KeyCode == Keys.A)
+                camera.Rotate(-0.01);
+            if (e.KeyCode == Keys.D)
+                camera.Rotate(0.01);
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -49,7 +55,7 @@ namespace GLShooter
                 e.Graphics.DrawLine(new Pen(color), x, drawStart, x, drawEnd);
 
             }
-            camera.Rotate(0.01);
+            
         }
 
         private void TimerLoop(object sender, EventArgs e)
