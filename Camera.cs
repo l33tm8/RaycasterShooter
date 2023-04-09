@@ -15,6 +15,8 @@ namespace GLShooter
         public Vector Direction { get => direction; set => direction = value; }
         public Vector Position { get => position; set => position = value; }
         public Vector Plane { get => plane; }
+        public double Velocity { get; set; }
+        public double RotationSpeed { get; set; }
 
         private Vector position;
         private Vector direction;
@@ -26,6 +28,7 @@ namespace GLShooter
             this.position = position;
             this.direction = direction;
             plane = new Vector(0, 0.66);
+            Velocity = 0;
         }
 
         public int CastWall(int x, int width, int height, out int side)
@@ -71,8 +74,8 @@ namespace GLShooter
 
         public void Rotate(double angle)
         {
-            Plane.Rotate(angle);
-            Direction.Rotate(angle);
+            Plane.Rotate(angle * RotationSpeed);
+            Direction.Rotate(angle * RotationSpeed);
         }
 
         private Vector GetSideDist(Vector rayDir, double mapX, double mapY, Vector deltaDist)
@@ -88,6 +91,11 @@ namespace GLShooter
             else
                 sideDist.Y = (mapY + 1.0 - Position.Y) * deltaDist.Y;
             return sideDist;
+        }
+
+        public void Move()
+        {
+            Position += Direction * Velocity;
         }
     }
 }

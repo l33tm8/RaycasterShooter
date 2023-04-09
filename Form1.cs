@@ -15,7 +15,7 @@ namespace GLShooter
 
         private int tickCount = 0;
         private Camera camera;
-        
+
         public Form1()
         {
             this.Width = 600;
@@ -26,19 +26,28 @@ namespace GLShooter
             t.Tick += TimerLoop;
             camera = new Camera(new Vector(12, 12), new Vector(-1.0, 0.0));
             KeyDown += Form1_KeyDown;
+            KeyUp += Form1_KeyUp;
             t.Start();
+        }
+
+        private void Form1_KeyUp(object? sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.W || e.KeyCode == Keys.S)
+                camera.Velocity = 0;
+            if (e.KeyCode == Keys.A || e.KeyCode == Keys.D)
+                camera.RotationSpeed = 0;
         }
 
         private void Form1_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.W)
-                camera.Position += camera.Direction * 0.1;
+                camera.Velocity = 0.1;
             if (e.KeyCode == Keys.S)
-                camera.Position -= camera.Direction * 0.1;
+                camera.Velocity = -0.1;
             if (e.KeyCode == Keys.A)
-                camera.Rotate(-0.01);
+                camera.RotationSpeed = -1;
             if (e.KeyCode == Keys.D)
-                camera.Rotate(0.01);
+                camera.RotationSpeed = 1;
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -61,6 +70,8 @@ namespace GLShooter
         private void TimerLoop(object sender, EventArgs e)
         {
             tickCount++;
+            camera.Move();
+            camera.Rotate(0.05);
             Invalidate();
         }
     }
