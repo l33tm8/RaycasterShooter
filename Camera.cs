@@ -31,21 +31,21 @@ namespace GLShooter
             Velocity = 0;
         }
 
-        public int CastWall(int x, int width, int height, out int side)
+
+        public int CastWall(int x, int width, int height, out int side, out int mapX, out int mapY, out int texX, out double perpWallDist)
         {
             var cameraX = 2 * x / (double)width - 1;
             var rayDir = Direction + Plane * cameraX;
             var deltaDist = new Vector(Math.Abs(1 / rayDir.X), Math.Abs(1 / rayDir.Y));
 
-            double perpWallDist;
-            var mapX = (int)Position.X;
-            var mapY = (int)Position.Y;
+            perpWallDist = 0;
+            mapX = (int)Position.X;
+            mapY = (int)Position.Y;
             var stepX = rayDir.X < 0 ? -1 : 1;
             var stepY = rayDir.Y < 0 ? -1 : 1;
             var isHitted = false;
             side = 0;
             var sideDist = GetSideDist(rayDir, mapX, mapY, deltaDist);
-
             while (!isHitted)
             {
                 if (sideDist.X < sideDist.Y)
@@ -60,14 +60,22 @@ namespace GLShooter
                     mapY += stepY;
                     side = 1;
                 }
-
+                
                 if (Map.mapObjects[(int)mapX][(int)mapY] > 0) isHitted = true;
             }
+            texX = 0;
+            if (!isHitted)
+                return 0;
             if (side == 0)
                 perpWallDist = sideDist.X - deltaDist.X;
             else
                 perpWallDist = sideDist.Y - deltaDist.Y;
-
+            var hitX = side == 0 ? (Position.Y + perpWallDist * rayDir.Y) : (Position.X + perpWallDist * rayDir.X);
+            texX = (int)((hitX - Math.Floor(hitX)) * 64);
+            
+            
+            if (side == 0 && rayDir.X > 0) hitX = 64 - hitX - 1;
+            if (side == 1 && rayDir.Y < 0) hitX = 64 - hitX - 1;
             return (int)(height / perpWallDist);
 
         }
@@ -95,7 +103,9 @@ namespace GLShooter
 
         public void Move()
         {
-            Position += Direction * Velocity;
+            var newPosition = Position + Direction * Velocity;
+            if (Map.mapObjects[(int)newPosition.X][(int)newPosition.Y] == 0)
+                Position = newPosition;
         }
     }
 }
