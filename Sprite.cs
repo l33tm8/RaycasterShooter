@@ -7,7 +7,7 @@ using GLShooter.Geometry;
 
 namespace GLShooter
 {
-    struct Sprite
+    public struct Sprite
     {
         public Vector position;
         public Texture texture;

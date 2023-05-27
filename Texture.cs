@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 
 namespace GLShooter
 {
-    class Texture
+    public class Texture
     {
         
         public Bitmap Image { get => image; }

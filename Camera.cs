@@ -8,7 +8,7 @@ using GLShooter.Geometry;
 
 namespace GLShooter
 {
-    internal class Camera
+    public class Camera
     {
         
 

@@ -11,22 +11,41 @@ using System.Drawing.Imaging;
 namespace GLShooter
 {
 
-    internal class Form1 : Form
+    enum WeaponState
+    {
+        WeaponIdle,
+        WeaponFire
+    }
+
+    public class Form1 : Form
     {
         private System.Windows.Forms.Timer t;
-
+        private System.Windows.Forms.Timer fireTimer;
         private int tickCount = 0;
         private Camera camera;
         private List<Texture> textures = new();
-        private List<Sprite> sprites = new();
+        private List<Texture> weaponTextures = new();
+        private List<Enemy> enemies = new();
+        private WeaponState currentWeaponState;
+        private Texture currentWeaponTexture;
+        private Texture fireballTexture;
+        private Color[,] buffer;
+        private double[] zBuffer;
+
         public Form1()
         {
             this.Width = 600;
             this.Height = 600;
+            buffer = new Color[Width, Height];
+            zBuffer = new double[Width];
             this.DoubleBuffered = true;
             t = new System.Windows.Forms.Timer();
             t.Interval = 30;
             t.Tick += TimerLoop;
+            fireTimer = new System.Windows.Forms.Timer();
+            fireTimer.Interval = 2000;
+            fireTimer.Tick += FireLoop;
+
             camera = new Camera(new Vector(12, 12), new Vector(-1.0, 0.0));
             KeyDown += Form1_KeyDown;
             KeyUp += Form1_KeyUp;
@@ -40,16 +59,35 @@ namespace GLShooter
                 textures.Add(texture);
             }
 
-            var spriteTex = new Texture("Images/adikblue.png");
+            var basedWeaponTexture = new Texture("Images/weapon.png");
+            var weaponIdleImage = basedWeaponTexture.Image.Clone(new Rectangle(0, 0, 150, 150), 
+                basedWeaponTexture.Image.PixelFormat);
+            var weaponIdleTexture = new Texture(weaponIdleImage);
+            weaponIdleTexture.InitializeColorArray();
+            var weaponFireImage = basedWeaponTexture.Image.Clone(new Rectangle(0, 0, 300, 150),
+                basedWeaponTexture.Image.PixelFormat);
+            var weaponFireTexture = new Texture(weaponFireImage);
+            weaponFireTexture.InitializeColorArray();
+            weaponTextures.Add(weaponIdleTexture);
+            weaponTextures.Add(weaponFireTexture);
+            currentWeaponState = WeaponState.WeaponIdle;
+
+            var blueAdidas = new Texture("Images/adikblue.png");
             var redAdidas = new Texture("Images/adikred.png");
             redAdidas.InitializeColorArray();
-            spriteTex.InitializeColorArray();
-            sprites.Add(
-                new Sprite(new Vector(10, 10), redAdidas));
-            sprites.Add(
-                new Sprite(new Vector(12, 10), spriteTex));
+            blueAdidas.InitializeColorArray();
+
+            for (var i = 2; i < 10; i++)
+            {
+                var texture = i % 2 == 0 ? redAdidas : blueAdidas;
+                var enemy = new Enemy(new Sprite(new Vector(i, i), texture), new Vector(i, i), 100.0);
+                enemies.Add(enemy);
+            }
+
+            currentWeaponTexture = weaponTextures[0];
             
             t.Start();
+            fireTimer.Start();
         }
 
         private void Form1_KeyUp(object? sender, KeyEventArgs e)
@@ -63,20 +101,69 @@ namespace GLShooter
         private void Form1_KeyDown(object? sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.W)
-                camera.Velocity = 0.1;
+                camera.Velocity = 0.3;
             if (e.KeyCode == Keys.S)
-                camera.Velocity = -0.1;
+                camera.Velocity = -0.3;
             if (e.KeyCode == Keys.A)
-                camera.RotationSpeed = -1;
+                camera.RotationSpeed = -1.5;
             if (e.KeyCode == Keys.D)
-                camera.RotationSpeed = 1;
+                camera.RotationSpeed = 1.5;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            var buffer = new Color[Width, Height];
-            var zBuffer = new double[Width];
+            DrawFloors();
+            DrawWalls();
+            var sortedSprites = enemies
+                .OrderByDescending(x => Math.Abs((camera.Position - x.Sprite.position).Length()))
+                .Where(enemy => (camera.Position - enemy.Position).Length() < 7)
+                .Select(x => x.Sprite)
+                .ToArray();
 
+            var fireballs = enemies.
+                SelectMany(x => x.GetFireballs())
+                .Select(fireball => fireball.Sprite)
+                .ToArray();
+            // DrawSprites(sortedSprites);
+            // DrawSprites(fireballs);
+            var bufferImage = bufferToImage(new Bitmap(Width, Height));
+            e.Graphics.DrawImage(bufferImage, 0, 0);
+        }
+
+        private void DrawWalls()
+        {
+            Parallel.For(0, Width, (x) =>
+            {
+                var lineHeight = camera.CastWall(x, Width, Height, out int side, out int mapX, out int mapY, out int hitX, out double perpWallDist);
+                if (lineHeight > 0)
+                {
+                    var drawStart = -lineHeight / 2 + Height / 2;
+
+                    if (drawStart < 0) drawStart = 0;
+                    var drawEnd = lineHeight / 2 + Height / 2;
+                    if (drawEnd > Height) drawEnd = Height - 1;
+
+                    var textureId = Map.mapObjects[mapX][mapY] - 1;
+
+                    var step = 64 / ((double)lineHeight + 1);
+                    var texY = 0.0;
+
+                    for (var y = drawStart; y < drawEnd; y++)
+                    {
+                        texY += step;
+
+                        var color = textures[textureId].GetPixel(hitX, (int)texY);
+
+                        buffer[x, y] = color;
+                        zBuffer[x] = perpWallDist;
+                    }
+
+                }
+            });
+        }
+
+        private void DrawFloors()
+        {
             for (var y = 0; y < Height; y++)
             {
                 var rayDirLeft = camera.Direction - camera.Plane;
@@ -107,38 +194,52 @@ namespace GLShooter
                     buffer[x, Height - y - 1] = textures[4].GetPixel(tx, ty);
                 }
             }
-            Parallel.For(0, Width, (x) =>
-            {
-                var lineHeight = camera.CastWall(x, Width, Height, out int side, out int mapX, out int mapY, out int hitX, out double perpWallDist);
-                if (lineHeight > 0)
+        }
+
+        private Bitmap bufferToImage(Bitmap bufferImage)
+        {
+            var bitmapData = bufferImage.LockBits(new Rectangle(0, 0, bufferImage.Width, bufferImage.Height), ImageLockMode.ReadWrite,
+                            bufferImage.PixelFormat);
+            var bytesPerPixel = Bitmap.GetPixelFormatSize(bufferImage.PixelFormat) / 8;
+            var byteCount = bitmapData.Stride * bufferImage.Height;
+            var pixels = new byte[byteCount];
+            var ptrFirstPixel = bitmapData.Scan0;
+            var heightInPixels = bitmapData.Height;
+            var widthInBytes = bitmapData.Width * bytesPerPixel;
+
+            for (var x = 200; x < 200 + currentWeaponTexture.Image.Width; x++)
+                for (var y = 300; y < 300 + currentWeaponTexture.Image.Height; y++)
                 {
-                    var drawStart = -lineHeight / 2 + Height / 2;
-
-                    if (drawStart < 0) drawStart = 0;
-                    var drawEnd = lineHeight / 2 + Height / 2;
-                    if (drawEnd > Height) drawEnd = Height - 1;
-
-                    var textureId = Map.mapObjects[mapX][mapY] - 1;
-
-                    var step = 64 / ((double)lineHeight + 1);
-                    var texY = 0.0;
-
-                    for (var y = drawStart; y < drawEnd; y++)
-                    {
-                        texY += step;
-
-                        var color = textures[textureId].GetPixel(hitX, (int)texY);
-
-                        buffer[x, y] = color;
-                        zBuffer[x] = perpWallDist;
-                    }
-
+                    buffer[x, y] = currentWeaponTexture.GetPixel(x - 200, y - 300);
                 }
-            });
-            var sortedSprites = sprites
-                .OrderByDescending(x => Math.Abs((camera.Position - x.position).Length()))
-                .ToArray();
-            for (var i = 0; i < sprites.Count; i++)
+
+            Marshal.Copy(ptrFirstPixel, pixels, 0, pixels.Length);
+
+            Parallel.For(0, heightInPixels, (y) =>
+            {
+                int currentLine = y * bitmapData.Stride;
+                var buffX = 0;
+                for (int x = 0; x < widthInBytes; x = x + bytesPerPixel)
+                {
+
+                    pixels[currentLine + x] = buffer[buffX, y].B;
+                    pixels[currentLine + x + 1] = buffer[buffX, y].G;
+                    pixels[currentLine + x + 2] = buffer[buffX, y].R;
+                    pixels[currentLine + x + 3] = 255;
+                    buffX++;
+                }
+            }
+
+            );
+
+            Marshal.Copy(pixels, 0, ptrFirstPixel, pixels.Length);
+            bufferImage.UnlockBits(bitmapData);
+            return bufferImage;
+        }
+
+        private void DrawSprites(Sprite[] sortedSprites)
+        {
+            for (var i = 0; i < sortedSprites.Length; i++)
             {
                 var sprite = sortedSprites[i];
                 var spriteRelatedPosition = sprite.position - camera.Position;
@@ -146,7 +247,7 @@ namespace GLShooter
                 var invDet = 1.0 / (camera.Plane.X * camera.Direction.Y - camera.Direction.X * camera.Plane.Y);
                 var transformX = invDet * (camera.Direction.Y * spriteRelatedPosition.X
                     - camera.Direction.X * spriteRelatedPosition.Y);
-                var transformY = invDet * (-camera.Plane.Y * spriteRelatedPosition.X 
+                var transformY = invDet * (-camera.Plane.Y * spriteRelatedPosition.X
                     + camera.Plane.X * spriteRelatedPosition.Y);
 
                 var spriteScreenX = (int)((Width / 2) * (1 + transformX / transformY));
@@ -165,13 +266,15 @@ namespace GLShooter
 
                 for (var stripe = drawStartX; stripe < drawEndX; stripe++)
                 {
-                    var texX = (int)(256 * (stripe 
+                    var texX = (int)(256 * (stripe
                         - (-spriteWidth / 2 + spriteScreenX)) * 64 / spriteWidth) / 256;
                     if (transformY > 0 && stripe > 0 && stripe < Width && transformY < zBuffer[stripe])
                         for (var y = drawStartY; y < drawEndY; y++)
                         {
                             var d = (y) * 256 - Height * 128 + spriteHeight * 128;
                             var texY = ((d * 64) / spriteHeight) / 256;
+                            if (texX < 0 || texY < 0)
+                                continue;
                             var color = sprite.texture.GetPixel(texX, texY);
                             if (color.R == 0 && color.G == 0 && color.B == 0)
                                 continue;
@@ -179,47 +282,32 @@ namespace GLShooter
                         }
                 }
             }
-
-            var bufferImage = new Bitmap(Width, Height);
-            var bitmapData = bufferImage.LockBits(new Rectangle(0, 0, bufferImage.Width, bufferImage.Height), ImageLockMode.ReadWrite, 
-                bufferImage.PixelFormat);
-            var bytesPerPixel = Bitmap.GetPixelFormatSize(bufferImage.PixelFormat) / 8;
-            var byteCount = bitmapData.Stride * bufferImage.Height;
-            var pixels = new byte[byteCount];
-            var ptrFirstPixel = bitmapData.Scan0;
-            var heightInPixels = bitmapData.Height;
-            var widthInBytes = bitmapData.Width * bytesPerPixel;
-
-            Marshal.Copy(ptrFirstPixel, pixels, 0, pixels.Length);
-
-            Parallel.For(0, heightInPixels, (y) =>
-            {
-                int currentLine = y * bitmapData.Stride;
-                var buffX = 0;
-                for (int x = 0; x < widthInBytes; x = x + bytesPerPixel)
-                {
-                    pixels[currentLine + x] = buffer[buffX, y].B;
-                    pixels[currentLine + x + 1] = buffer[buffX, y].G;
-                    pixels[currentLine + x + 2] = buffer[buffX, y].R;
-                    pixels[currentLine + x + 3] = 255;
-                    buffX++;
-                }
-            }
-            );
-
-            Marshal.Copy(pixels, 0, ptrFirstPixel, pixels.Length);
-            bufferImage.UnlockBits(bitmapData);
-            
-            e.Graphics.DrawImage(bufferImage, 0, 0);
-
         }
 
         private void TimerLoop(object sender, EventArgs e)
         {
             tickCount++;
             camera.Move();
-            camera.Rotate(0.05);
-            Invalidate();
+            camera.Rotate(0.1);
+            foreach (var enemy in enemies)
+            {
+                var distVector = camera.Position - enemy.Position;
+                if (distVector.Length() > 2)
+                    enemy.Direction = distVector.Normalize() * 0.1;
+                else
+                    enemy.Direction = new Vector(0, 0);
+                enemy.Move();
+            }
+            Refresh();
+        }
+
+        private void FireLoop(object sender, EventArgs e)
+        {
+            var nearestEnemy = enemies.
+                OrderBy(x => (x.Position - camera.Position).Length())
+                .FirstOrDefault();
+            if (nearestEnemy != null)
+                nearestEnemy.Fire();
         }
     }
 }
