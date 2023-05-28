@@ -50,7 +50,9 @@ namespace GLShooter
         {
             this.Width = 600;
             this.Height = 600;
-            
+            MaximizeBox = false;
+            MinimizeBox = false;
+            FormBorderStyle = FormBorderStyle.FixedSingle;
             buffer = new Color[Width, Height];
             zBuffer = new double[Width];
             this.DoubleBuffered = true;
