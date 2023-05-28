@@ -28,14 +28,29 @@ namespace GLShooter
         private List<Enemy> enemies = new();
         private WeaponState currentWeaponState;
         private Texture currentWeaponTexture;
-        private Texture fireballTexture;
         private Color[,] buffer;
         private double[] zBuffer;
+        private Label infoLabel;
+
+        private List<Vector> enemiesPositions = new()
+        {
+            new Vector(2, 2),
+            new Vector(7, 2),
+            new Vector(11, 2),
+            new Vector(6, 5),
+            new Vector(10, 5),
+            new Vector(15, 5),
+            new Vector(15, 15),
+            new Vector(15, 10),
+            new Vector(4, 18),
+
+        };
 
         public Form1()
         {
             this.Width = 600;
             this.Height = 600;
+            
             buffer = new Color[Width, Height];
             zBuffer = new double[Width];
             this.DoubleBuffered = true;
@@ -46,7 +61,7 @@ namespace GLShooter
             fireTimer.Interval = 2000;
             fireTimer.Tick += FireLoop;
 
-            camera = new Camera(new Vector(12, 12), new Vector(-1.0, 0.0));
+            camera = new Camera(new Vector(18, 5), new Vector(-1.0, 0.0));
             KeyDown += Form1_KeyDown;
             KeyUp += Form1_KeyUp;
             var basedTexture = new Texture("Images/wolftextures.png");
@@ -77,15 +92,24 @@ namespace GLShooter
             redAdidas.InitializeColorArray();
             blueAdidas.InitializeColorArray();
 
-            for (var i = 2; i < 10; i++)
+            var offset = 0;
+            foreach (var enemyPosition in enemiesPositions)
             {
-                var texture = i % 2 == 0 ? redAdidas : blueAdidas;
-                var enemy = new Enemy(new Sprite(new Vector(i, i), texture), new Vector(i, i), 100.0);
+                var texture = offset % 2 == 0 ? redAdidas : blueAdidas;
+                var enemy = new Enemy(new Sprite(enemyPosition, texture), enemyPosition, 100.0);
                 enemies.Add(enemy);
+                offset++;
             }
 
             currentWeaponTexture = weaponTextures[0];
-            
+            infoLabel = new()
+            {
+                Text = String.Format("Health: {0:0}", camera.Health),
+                Location = new Point(10, 520),
+                AutoSize = true,
+                
+            };
+            Controls.Add(infoLabel);
             t.Start();
             fireTimer.Start();
         }
@@ -108,6 +132,9 @@ namespace GLShooter
                 camera.RotationSpeed = -1.5;
             if (e.KeyCode == Keys.D)
                 camera.RotationSpeed = 1.5;
+
+            if (e.KeyCode == Keys.Space)
+                camera.Fire();
         }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -124,10 +151,16 @@ namespace GLShooter
                 SelectMany(x => x.GetFireballs())
                 .Select(fireball => fireball.Sprite)
                 .ToArray();
-            // DrawSprites(sortedSprites);
-            // DrawSprites(fireballs);
+
+            fireballs = fireballs.Concat(camera
+                .GetFireballs()
+                .Select(fireball => fireball.Sprite)
+                .ToArray()).ToArray();
+            DrawSprites(sortedSprites);
+            DrawSprites(fireballs);
             var bufferImage = bufferToImage(new Bitmap(Width, Height));
-            e.Graphics.DrawImage(bufferImage, 0, 0);
+            e.Graphics.DrawImage(bufferImage, 0, 0, 600, 580);
+            
         }
 
         private void DrawWalls()
@@ -208,9 +241,11 @@ namespace GLShooter
             var widthInBytes = bitmapData.Width * bytesPerPixel;
 
             for (var x = 200; x < 200 + currentWeaponTexture.Image.Width; x++)
-                for (var y = 300; y < 300 + currentWeaponTexture.Image.Height; y++)
+                for (var y = 425; y < 425 + currentWeaponTexture.Image.Height; y++)
                 {
-                    buffer[x, y] = currentWeaponTexture.GetPixel(x - 200, y - 300);
+                    var color = currentWeaponTexture.GetPixel(x - 200, y - 425);
+                    if (color.R != 0 && color.G != 0 && color.B != 0)
+                        buffer[x, y] = color;
                 }
 
             Marshal.Copy(ptrFirstPixel, pixels, 0, pixels.Length);
@@ -287,16 +322,45 @@ namespace GLShooter
         private void TimerLoop(object sender, EventArgs e)
         {
             tickCount++;
-            camera.Move();
-            camera.Rotate(0.1);
-            foreach (var enemy in enemies)
+            if (camera.Health > 0)
             {
-                var distVector = camera.Position - enemy.Position;
-                if (distVector.Length() > 2)
-                    enemy.Direction = distVector.Normalize() * 0.1;
-                else
-                    enemy.Direction = new Vector(0, 0);
-                enemy.Move();
+                camera.Move();
+                camera.Rotate(0.1);
+                infoLabel.Text = String.Format("Health: {0:0}", camera.Health);
+                foreach (var enemy in enemies.ToList())
+                {
+                    var distVector = camera.Position - enemy.Position;
+                    if (distVector.Length() > 2)
+                        enemy.Direction = distVector.Normalize() * 0.1;
+                    else
+                        enemy.Direction = new Vector(0, 0);
+                    enemy.Move();
+                    foreach (var fireball in enemy.GetFireballs())
+                    {
+                        var distance = (camera.Position - fireball.Position).Length();
+                        if (distance < 0.5)
+                        {
+                            enemy.RemoveFireball(fireball);
+                            camera.Health -= 10;
+                        }
+                    }
+
+                    foreach (var fireball in camera.GetFireballs())
+                    {
+                        var distance = (enemy.Position - fireball.Position).Length();
+                        if (distance < 1)
+                        {
+                            camera.RemoveFireball(fireball);
+                            enemy.Health -= 50;
+                            if (enemy.Health <= 0)
+                                enemies.Remove(enemy);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                infoLabel.Text = "you died!!!";
             }
             Refresh();
         }

@@ -18,6 +18,8 @@ namespace GLShooter
         public double Velocity { get; set; }
         public double RotationSpeed { get; set; }
 
+        public double Health { get; set; }
+
         private Vector position;
         private Vector direction;
 
@@ -29,6 +31,10 @@ namespace GLShooter
             this.direction = direction;
             plane = new Vector(0, 0.66);
             Velocity = 0;
+            Health = 100.0;
+            fireballTexture = new Texture(new Bitmap("Images/fire.png"));
+            fireballTexture.InitializeColorArray();
+            fireballs = new();
         }
 
 
@@ -106,6 +112,42 @@ namespace GLShooter
             var newPosition = Position + Direction * Velocity;
             if (Map.mapObjects[(int)newPosition.X][(int)newPosition.Y] == 0)
                 Position = newPosition;
+            foreach (var fireball in fireballs.ToList())
+            {
+                fireball.Position += fireball.Direction;
+                if (!Map.InBounds(fireball.Position))
+                    fireballs.Remove(fireball);
+                else if (Map.mapObjects[(int)fireball.Position.X][(int)fireball.Position.Y] != 0)
+                    fireballs.Remove(fireball);
+            }
         }
+
+        public IEnumerable<Fireball> GetFireballs()
+        {
+            foreach (var fireball in fireballs.ToList())
+                yield return fireball;
+        }
+
+        public void RemoveFireball(Fireball fireball)
+        {
+            fireballs.Remove(fireball);
+        }
+
+        public void Fire()
+        {
+            var fireballSprite = new Sprite(Position, fireballTexture);
+            if (Direction.Length() > 0)
+            {
+                var fireball = new Fireball(fireballSprite, Position + Direction)
+                {
+                    Direction = Direction * 2
+                };
+                fireballs.Add(fireball);
+            }
+        }
+
+        private Texture fireballTexture;
+        private List<Fireball> fireballs;
+
     }
 }
